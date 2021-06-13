@@ -1,11 +1,10 @@
-use std::{result, error, io, fmt};
+use std::{result, error, io, fmt, str::fromStr};
 use derive_more::{self, Error, From};
 use strum_macros as strum;
 pub type Result<T> = result::Result<T, Error>;
 #[derive(Debug, Error)]
 pub struct ParseError {
-    line : usize,
-    column : usize,
+    kind : TokenKind,
     msg : String
 }
 impl fmt::Display for ParseError {
@@ -19,46 +18,153 @@ pub enum Error {
     Io(io::Error),
     Parse(ParseError)
 }
-#[derive(Debug, strum::Display)]
-pub(crate) enum TokenType {    
-    Identifier(String),
-    Number(f64),
-    String(String),
-    Keyword(Keyword),
-    Op(Operator)
+pub struct Token {
+    token_kind : TokenKind,
+    //Store locations as offset + length, we need to count newlines
+    //to provide specific locations, but it's worth it given that
+    //errors are relatively rare.
+    offset : usize,
+    length : usize,
+    value : Option<RloxValue>
 }
-impl From<&str> for Token {
-    fn from(str : &str) -> Self {
-        Token::String(str.to_string())
+impl for Token {
+    pub fn new(kind : TokenKind, offset : usize,
+               length : usize, value : Option<RloxValue>){
+        Token { kind, offset, length, value }
     }
-}        
+}
+/*
+ An enumeration representing the different kinds of tokens,
+ each type may have further subdivisions.
+ Would be called TokenType, but since type is a reserved word
+ 
+*/
+#[derive(Debug, strum::Display)]
+pub(crate) enum TokenKind {
+    //Tokens with an assoicated value
+    Identifier,
+    Float,
+    Integer,
+    String,
+    //Tokens without an assoicated value
+    Keyword(Keyword),
+    Operator(Operator),
+    Punctuation(Punctuation)
+}
+// impl From<&str> for TokenKind {
+//     fn from(str : &str) -> Self {
+//         Token::String(str.to_string())
+//     }
+// }
+// macro_rules! impl_from_for_token {
+//     $($from:ty) => {
+//         impl From<$from> for TokenKind {
+//             fn from(arg : $from){
+//                 TokenKind::$from(arg)
+//             }
+//         }
+//     }
+// }
+
+impl From<Operator> for TokenKind {
+    fn from(op: Operator){
+        TokenKind::Operator(op)
+    }
+}
+impl From<Punctuation> for TokenKind {
+    fn from(punct : Punctuation){
+        TokenKind::Punctuation(punct)
+    }
+}
+    
 #[derive(Debug, strum::Display, strum::EnumString)]
 pub(crate) enum Operator {
     //Arithmetic
-    Add, Sub, Mul, Div,
+    #[strum(serialize = "+")]
+    Add,
+    #[strum(serialize = "-")]
+    Sub,
+    #[strum(serialize = "*")]
+    Mul,
+    #[strum(serialize = "/")]
+    Div,
     //Comparison
-    Eq, NotEq, LtEq, GtEq, Lt, Gt,
+    #[strum(serialize = "==")]
+    Eq,
+    #[strum(serialize = "!=")]
+    NotEq,
+    #[strum(serialize = "<=")]
+    LtEq,
+    #[strum(serialize = ">=")]
+    GtEq,
+    #[strum(serialize = "<")]
+    Lt,
+    #[strum(serialize = ">")]
+    Gt,
     //Bitwise
-    BitNot, BitAnd, BitOr, BitXor,
+    #[strum(serialize = "~")]
+    BitNot,
+    #[strum(serialize = "&")]
+    BitAnd,
+    #[strum(serialize = "|")]
+    BitOr,
+    #[strum(serialize = "^")]   
+    BitXor,
+    #[strum(serialize = "<<")]
+    Shl, //Kept short to match the rest of the enum names
+    #[strum(serialize = ">>")]
+    Shr,
     //Logical
-    Not, And, Or
+    #[strum(serialize = "!")]
+    Not,
+    #[strum(serialize = "&&")]
+    And,
+    #[strum(serialize = "||")]
+    Or,
+    //Assignment
+    #[strum(serialize = "=")]
+    Set,
+    #[strum(serialize = "+=")]
+    AddSet,
+    #[strum(serialize = "-=")]
+    SubSet,
+    #[strum(serialize = "*=")]
+    MulSet,
+    #[strum(serialize = "/=")]
+    DivSet,
+    #[strum(serialize = "&=")]
+    AndSet,
+    #[strum(serialize = "|=")]
+    OrSet,
+    #[strum(serialize = "^=")]
+    XorSet,
+    #[strum(serialize = "<<=")]
+    ShlSet,
+    #[strum(serialize = ">>=")]
+    ShrSet,
 }
 /*
-  Not A Huge fan of having this be a seperate enum, but 
-  I'm not sure how to best seperate the different parts right now. 
+  Not A Huge fan of having this be a seperate enum, but
+  I'm not sure how to best seperate the different parts right now.
 */
 #[derive(Debug, strum::Display, strum::EnumString)]
 pub(crate) enum Punctuation {
+    #[strum(serialize = "(")]
     LParen,
+    #[strum(serialize = ")")]
     RParen,
-    LBracket,
-    RBracket,
+    #[strum(serialize = "{")]
+    LBrace,
+    #[strum(serialize = "}")]
+    RBrace,
+    #[strum(serialize = ",")]
     Comma,
-    Semicolon
+    #[strum(serialize = ";")]
+    Semicolon,
+    #[strum(serialize = ".")]
+    Period
 }
-    
-    
-#[derive(Debug, strum::Display, strum::EnumString)]
+#[derive(Debug, strum::Display, strum::EnumString, strum::EnumVariantNames)]
 #[strum(serialize_all = "lowercase")]
 pub(crate) enum Keyword {
     //Control Flow
@@ -66,8 +172,15 @@ pub(crate) enum Keyword {
     //Data / Variables
     Var, Class, Fun, This, Super,
     //Literals
-    True, False, Nil,
-    
-pub enum LoxValue {
-}   
-        
+    True, False, Nil
+}
+pub enum RloxValue {
+    Int(i64),
+    Double(f64),
+    String(String),
+/*    Class(Class),
+    Object(Object),
+    Function(Function),
+    Symbol(Symbol)*/
+}
+impl 
